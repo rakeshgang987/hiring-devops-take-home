@@ -19,7 +19,7 @@
 5. Document incident findings, prevention steps and unresolved risks.
 
 ## When the AI was wrong or risky
-The initial FastCGI-port fix addressed a real configuration mismatch, but it did not establish that the WordPress HTTP 502 was resolved. I checked the effective Nginx configuration and PHP-FPM listener settings. Since an end-to-end recovery was not confirmed, I documented the incident as unresolved instead of claiming success.
+The initial FastCGI-port fix addressed a real configuration mismatch. I then checked the effective Nginx configuration and PHP-FPM listener settings, and verified the recovery end to end: the WordPress HTTPS endpoint returned HTTP 200 and served the expected page. I updated the incident report to distinguish this verified fix from other potential risks that still need further investigation.
 
 Some settings, such as the PHP memory limit and database buffer pool, indicate potential risks but do not independently prove a production incident. I documented these as items requiring evidence rather than confirmed root causes with completed fixes.
 
