@@ -16,9 +16,9 @@
 
 ## Issue 3: WordPress HTTP 502 / FastCGI upstream mismatch
 - **Symptom:** WordPress HTTPS endpoint returned HTTP 502.
-- **How I found it:** Inspected `web/default.conf`, effective Nginx config and PHP-FPM listener settings.
-- **Root cause:** The original Nginx FastCGI target used port 9001, while PHP-FPM was configured for port 9000.
-- **Fix:** Changed `fastcgi_pass` to `wordpress:9000` and added an explicit pool listener. Nginx syntax validation passed, but the end-to-end 502 is not yet confirmed resolved. Commit: `695a8f9`.
+- **How I found it:** Compared `web/default.conf` FastCGI target with the PHP-FPM pool listener.
+- **Root cause:** Nginx targeted port 9001 while PHP-FPM listens on port 9000.
+- **Fix:** Changed `fastcgi_pass` to `wordpress:9000` and configured the PHP-FPM pool listener on port 9000. Nginx syntax validation passed; subsequent end-to-end verification returned HTTP 200 from `https://localhost:8443/`, with WordPress HTML confirmed. Commit: `695a8f9`.
 - **Prevention:** Test the complete request path after deployment and alert on upstream errors.
 
 ## Issue 4: PHP-FPM worker capacity is constrained
@@ -36,10 +36,11 @@
 - **Prevention:** Monitor memory exhaustion and test exports with representative data.
 
 ## Issue 6: Redis network exposure
-- **Symptom:** Redis may be reachable by hosts that should not access the cache.
+- **Symptom:** Publishing Redis on the host unnecessarily increased the attack surface.
 - **How I found it:** Inspected `redis/redis.conf` and the Redis port mapping in Compose.
-- **Root cause:** Redis uses `bind 0.0.0.0`, `protected-mode no`, and publishes port 6379 on the host.
-- **Fix:** Risk identified; network exposure has not yet been remediated. Remove unnecessary host port publication and restrict Redis to the private application network; configure authentication as appropriate.
+- **Root cause:** Compose published container port 6379 on the host while Redis was configured with `bind 0.0.0.0` and `protected-mode no`.
+- **Fix:** Removed the Redis host port mapping while retaining Redis's internal port for container-to-container communication. Recreated the Redis service; `docker compose ps redis` showed only `6379/tcp` (no host mapping), `redis-cli ping` returned `PONG`, and the WordPress HTTPS endpoint continued returning HTTP 200.
+- **Security note:** This removes host port publication, but does not by itself add Redis authentication or restrict access among containers on the Docker network. Review network segmentation and authentication for the deployment's threat model.
 - **Prevention:** Audit exposed ports and enforce network access controls.
 
 ## Additional investigation notes
@@ -47,3 +48,9 @@
 - The 256 MB InnoDB buffer pool requires workload evidence before tuning.
 - The edge proxy does not explicitly pass `X-Forwarded-Proto`; verify HTTPS detection through the full proxy chain before changing WordPress URL settings.
 - Suspected risks are distinguished from confirmed, fixed incidents.
+
+## Backup verification
+- **Test:** Ran `docker compose --profile jobs run --rm backup`.
+- **Initial result:** Database dump and gzip compression succeeded, but upload failed because the `bsf-backups` bucket did not exist.
+- **Remediation:** Created the MinIO `bsf-backups` bucket.
+- **Final verification:** Reran the backup job successfully; the compressed database backup uploaded to `s3://bsf-backups/site-x/wordpress-20261027-172326.sql.gz`.

@@ -1,4 +1,3 @@
-```sh
 #!/bin/sh
 # Nightly WordPress database backup -> S3 (MinIO locally, AWS S3 in production)
 set -eu
@@ -43,4 +42,3 @@ if ! aws --endpoint-url "$S3_ENDPOINT" s3 cp "$FILE" \
 fi
 
 echo "[backup] backup uploaded successfully"
-```
