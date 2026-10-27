@@ -125,6 +125,13 @@ services:
   # Nightly backup job. Run manually with: docker compose run --rm backup
   backup:
     build: ./backup
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:-root-pass-2026}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-bsfadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-bsf-s3-root-secret}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://s3:9000
+      S3_BUCKET: bsf-backups
     volumes:
       - ./backup/backup.sh:/backup.sh:ro
     entrypoint: ["sh", "/backup.sh"]

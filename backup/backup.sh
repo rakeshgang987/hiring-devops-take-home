@@ -1,21 +1,46 @@
+```sh
 #!/bin/sh
 # Nightly WordPress database backup -> S3 (MinIO locally, AWS S3 in production)
-set -e
+set -eu
+umask 077
 
-export AWS_ACCESS_KEY_ID=bsfadmin
-export AWS_SECRET_ACCESS_KEY=bsf-s3-root-secret
-export AWS_DEFAULT_REGION=us-east-1
-S3="aws --endpoint-url http://s3:9000 s3"
+: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID must be set}"
+: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY must be set}"
+: "${DB_PASSWORD:?DB_PASSWORD must be set}"
 
-BUCKET=bsf-backups
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+S3_ENDPOINT="${S3_ENDPOINT:-http://s3:9000}"
+BUCKET="${S3_BUCKET:-bsf-backups}"
+PREFIX="site-x"
+
 STAMP=$(date +%Y%m%d-%H%M%S)
-FILE=/tmp/wordpress-$STAMP.sql.gz
+SQL_FILE="/tmp/wordpress-$STAMP.sql"
+FILE="/tmp/wordpress-$STAMP.sql.gz"
+
+cleanup() {
+  rm -f "$SQL_FILE" "$FILE"
+}
+trap cleanup EXIT HUP INT TERM
 
 echo "[backup] dumping database ..."
-mariadb-dump -h db -u root -proot-pass-2026 --all-databases | gzip > "$FILE"
+if ! mariadb-dump -h db -u root --password="$DB_PASSWORD" --all-databases > "$SQL_FILE"; then
+  echo "[backup] ERROR: database dump failed" >&2
+  exit 1
+fi
+
+if ! gzip -c "$SQL_FILE" > "$FILE"; then
+  echo "[backup] ERROR: compression failed" >&2
+  exit 1
+fi
+rm -f "$SQL_FILE"
 
 echo "[backup] uploading ..."
-$S3 mb "s3://$BUCKET" 2>/dev/null || true
-$S3 cp "$FILE" "s3://$BUCKET/site-x/"
+if ! aws --endpoint-url "$S3_ENDPOINT" s3 cp "$FILE" \
+  "s3://$BUCKET/$PREFIX/$(basename "$FILE")"; then
+  echo "[backup] ERROR: upload failed" >&2
+  exit 1
+fi
 
-echo "[backup] done: s3://$BUCKET/site-x/$(basename "$FILE")"
+echo "[backup] backup uploaded successfully"
+```
